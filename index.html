@@ -347,7 +347,7 @@
 
         async function decryptData(combinedDataBytes, password) {
           if (!password) throw new Error("Le mot de passe ne peut pas être vide.");
-          if (combinedDataBytes.length < 28) throw new Error("Données chiffrées invalides ou trop courtes."); // Message plus précis
+          if (combinedDataBytes.length < 28) throw new Error("Données chiffrées invalides ou trop courtes (manque de sel/IV/contenu)."); // Message plus précis
 
           const salt = combinedDataBytes.slice(0, 16);
           const iv = combinedDataBytes.slice(16, 28);
@@ -469,24 +469,43 @@
                 payload.set(encryptedBytes, 4);
 
                 const numPixels = Math.ceil(payload.length / 4);
-                // Largeur dynamique: min 16, max 1024, tendant vers un carré
-                const width = Math.min(1024, Math.max(16, Math.ceil(Math.sqrt(numPixels))));
-                const height = Math.ceil(numPixels / width);
+                
+                // Calcul intelligent de la largeur pour tendre vers un carré mais avec des limites
+                // CORRECTION IMPORTANTE: Assurer une largeur et hauteur suffisantes
+                let width = Math.min(1024, Math.max(1, Math.ceil(Math.sqrt(numPixels))));
+                let height = Math.ceil(numPixels / width);
 
+                // Assurer que la largeur * hauteur * 4 est au moins égal à payload.length
+                // En ajustant la hauteur si nécessaire pour accueillir tout le payload
+                if (width * height * 4 < payload.length) {
+                    height = Math.ceil(payload.length / (width * 4));
+                }
+                
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
+                
+                // CORRECTION IMPORTANTE: Initialiser ImageData avec tous les pixels à 0 (transparent)
+                // pour éviter la corruption de données avec des valeurs résiduelles
                 const imgData = ctx.createImageData(width, height);
+                // imgData.data est déjà initialisé à 0 par `createImageData` mais pour la clarté et sécurité:
+                // for (let i = 0; i < imgData.data.length; i++) {
+                //     imgData.data[i] = 0;
+                // }
+
 
                 // Écrire le payload dans les données de l'image
+                // Assurez-vous de ne pas dépasser la taille de imgData.data
                 for (let i = 0; i < payload.length; i++) {
-                    imgData.data[i] = payload[i];
+                    if (i < imgData.data.length) { // Sécurité supplémentaire
+                        imgData.data[i] = payload[i];
+                    } else {
+                        // Ceci ne devrait pas arriver avec les calculs de width/height corrects
+                        console.warn("Payload plus grand que imageData.data, données tronquées!");
+                        break; 
+                    }
                 }
-                // Remplir le reste des canaux avec 0 (transparent)
-                for (let i = payload.length; i < imgData.data.length; i++) {
-                    imgData.data[i] = 0;
-                }
-
+                
                 ctx.putImageData(imgData, 0, 0);
 
                 setStatus(encodeStatus, "Image chiffrée générée avec succès !", 'success');
@@ -562,14 +581,15 @@
 
                 // Vérifier si la taille du buffer est suffisante avant de tenter de lire la longueur
                 if (allBytes.buffer.byteLength < 4) {
-                    throw new Error("Image invalide ou corrompue: longueur des données chiffrées introuvable.");
+                    throw new Error("Image invalide ou corrompue: la taille de l'image est trop petite.");
                 }
 
+                // Lire la longueur des données chiffrées stockée au début
                 const encryptedDataLength = new DataView(allBytes.buffer).getUint32(0, false); // Big Endian
 
-                // Vérifier si la taille totale de l'image est suffisante pour les données chiffrées + en-têtes
+                // Vérifier si la taille totale de l'image est suffisante pour les données chiffrées + en-têtes (4 octets pour la longueur)
                 if (allBytes.length < (4 + encryptedDataLength)) {
-                     throw new Error("Image invalide ou corrompue: données chiffrées incomplètes.");
+                     throw new Error("Image invalide ou corrompue: données chiffrées incomplètes dans l'image.");
                 }
 
                 const encryptedBytes = allBytes.slice(4, 4 + encryptedDataLength);
