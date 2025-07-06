@@ -1,31 +1,3 @@
------
-
-Absolument \! J'ai bien noté que la restriction par IP locale était un exemple et que tu souhaites la retirer, tout en ajoutant d'autres systèmes de sécurité **facultatifs**.
-
-L'idée est de proposer des couches de sécurité supplémentaires qui pourraient intéresser des utilisateurs souhaitant renforcer la protection de leurs données, tout en gardant ces options non obligatoires pour la simplicité d'utilisation.
-
------
-
-## **Design et UI/UX : Affinements**
-
-Le design reste moderne et épuré, en se basant sur les améliorations précédentes. Les icônes Font Awesome sont conservées pour une meilleure compréhension visuelle.
-
------
-
-## **Nouvelles Options de Sécurité (Facultatives)**
-
-J'ai ajouté deux options de sécurité supplémentaires :
-
-1.  **Vérification de la Clé Secrète (Confirm Password)** : Une méthode classique mais efficace pour s'assurer que l'utilisateur a bien tapé la clé secrète correctement lors du chiffrement. Cela réduit le risque d'erreurs de frappe qui rendraient le déchiffrement impossible.
-2.  **Longueur Minimale de la Clé Secrète** : Une exigence simple pour encourager l'utilisation de mots de passe plus robustes.
-
-Ces options sont intégrées dans l'interface et sont facultatives, avec un message clair si l'utilisateur ne les respecte pas (par exemple, si les clés ne correspondent pas ou sont trop courtes).
-
------
-
-Voici le code HTML et JavaScript mis à jour :
-
-```html
 <!DOCTYPE html>
 <html>
 <head>
@@ -375,7 +347,7 @@ Voici le code HTML et JavaScript mis à jour :
 
         async function decryptData(combinedDataBytes, password) {
           if (!password) throw new Error("Le mot de passe ne peut pas être vide.");
-          if (combinedDataBytes.length < 28) throw new Error("Données chiffrées invalides.");
+          if (combinedDataBytes.length < 28) throw new Error("Données chiffrées invalides ou trop courtes."); // Message plus précis
 
           const salt = combinedDataBytes.slice(0, 16);
           const iv = combinedDataBytes.slice(16, 28);
@@ -422,29 +394,43 @@ Voici le code HTML et JavaScript mis à jour :
             const key1 = secretKeyInput.value;
             const key2 = confirmSecretKeyInput.value;
 
-            if (key2.length === 0 && key1.length === 0) {
-                setStatus(keyMatchStatus, "Entrez une clé secrète.", 'info');
-                return true;
+            // Si les deux champs sont vides, affichage du message initial
+            if (key1.length === 0 && key2.length === 0) {
+                setStatus(keyMatchStatus, "Entrez votre clé secrète ci-dessus.", 'info');
+                return false; // Pas encore prêt
             }
-            if (key1.length === 0) {
-                 setStatus(keyMatchStatus, "Veuillez entrer une clé secrète.", 'error');
-                 return false;
-            }
-            if (key1.length < MIN_KEY_LENGTH) {
+
+            // Vérification de la longueur minimale
+            if (key1.length > 0 && key1.length < MIN_KEY_LENGTH) {
                 setStatus(keyMatchStatus, `La clé doit contenir au moins ${MIN_KEY_LENGTH} caractères.`, 'warning');
                 return false;
             }
-            if (key2.length > 0 && key1 !== key2) {
-                setStatus(keyMatchStatus, "Les clés secrètes ne correspondent pas !", 'error');
-                return false;
+
+            // Si le champ de confirmation est utilisé
+            if (key2.length > 0) {
+                if (key1 !== key2) {
+                    setStatus(keyMatchStatus, "Les clés secrètes ne correspondent pas !", 'error');
+                    return false;
+                } else {
+                    setStatus(keyMatchStatus, "Clés secrètes correspondent et sont valides.", 'success');
+                    return true;
+                }
             }
-            if (key1 === key2 && key1.length >= MIN_KEY_LENGTH) {
-                setStatus(keyMatchStatus, "Clés secrètes correspondent et sont valides.", 'success');
-                return true;
+            // Si seul le champ principal est rempli et valide, sans confirmation
+            else if (key1.length >= MIN_KEY_LENGTH) {
+                 setStatus(keyMatchStatus, "Clé secrète valide. Pensez à confirmer pour éviter les erreurs.", 'info');
+                 return true;
             }
-            setStatus(keyMatchStatus, "Confirmez votre clé secrète.", 'info');
-            return false;
+            // Cas par défaut si la clé principale est trop courte et pas de confirmation
+            else {
+                 setStatus(keyMatchStatus, `La clé doit contenir au moins ${MIN_KEY_LENGTH} caractères.`, 'warning');
+                 return false;
+            }
         }
+
+        // Initialiser le statut de la clé au chargement
+        checkKeyMatch();
+
 
         // --- CHIFFREMENT ET ENCODAGE ---
         generateBtn.addEventListener('click', async () => {
@@ -462,6 +448,7 @@ Voici le code HTML et JavaScript mis à jour :
                 setStatus(encodeStatus, `Votre clé secrète est trop courte (min ${MIN_KEY_LENGTH} caractères).`, 'error');
                 return;
             }
+            // Vérifier la confirmation si elle a été saisie
             if (confirmKey.length > 0 && secretKey !== confirmKey) {
                 setStatus(encodeStatus, "Les clés secrètes ne correspondent pas. Veuillez les vérifier.", 'error');
                 return;
@@ -482,6 +469,7 @@ Voici le code HTML et JavaScript mis à jour :
                 payload.set(encryptedBytes, 4);
 
                 const numPixels = Math.ceil(payload.length / 4);
+                // Largeur dynamique: min 16, max 1024, tendant vers un carré
                 const width = Math.min(1024, Math.max(16, Math.ceil(Math.sqrt(numPixels))));
                 const height = Math.ceil(numPixels / width);
 
@@ -490,11 +478,13 @@ Voici le code HTML et JavaScript mis à jour :
                 const ctx = canvas.getContext('2d');
                 const imgData = ctx.createImageData(width, height);
 
+                // Écrire le payload dans les données de l'image
                 for (let i = 0; i < payload.length; i++) {
                     imgData.data[i] = payload[i];
                 }
+                // Remplir le reste des canaux avec 0 (transparent)
                 for (let i = payload.length; i < imgData.data.length; i++) {
-                    imgData.data[i] = 0; // Remplir le reste avec 0 (transparent/noir)
+                    imgData.data[i] = 0;
                 }
 
                 ctx.putImageData(imgData, 0, 0);
@@ -554,6 +544,11 @@ Voici le code HTML et JavaScript mis à jour :
                 setStatus(decodeStatus, "Veuillez entrer une clé secrète et charger une image.", 'error');
                 return;
             }
+            if (secretKey.length < MIN_KEY_LENGTH) { // Vérification de la longueur même au déchiffrement
+                setStatus(decodeStatus, `Votre clé secrète est trop courte (min ${MIN_KEY_LENGTH} caractères).`, 'error');
+                return;
+            }
+
 
             decodeBtn.disabled = true;
             setStatus(decodeStatus, "Lecture et déchiffrement...", 'info');
@@ -565,7 +560,18 @@ Voici le code HTML et JavaScript mis à jour :
                 const imgData = ctx.getImageData(0, 0, decodeCanvas.width, decodeCanvas.height);
                 const allBytes = imgData.data;
 
+                // Vérifier si la taille du buffer est suffisante avant de tenter de lire la longueur
+                if (allBytes.buffer.byteLength < 4) {
+                    throw new Error("Image invalide ou corrompue: longueur des données chiffrées introuvable.");
+                }
+
                 const encryptedDataLength = new DataView(allBytes.buffer).getUint32(0, false); // Big Endian
+
+                // Vérifier si la taille totale de l'image est suffisante pour les données chiffrées + en-têtes
+                if (allBytes.length < (4 + encryptedDataLength)) {
+                     throw new Error("Image invalide ou corrompue: données chiffrées incomplètes.");
+                }
+
                 const encryptedBytes = allBytes.slice(4, 4 + encryptedDataLength);
 
                 const decryptedBytes = await decryptData(encryptedBytes, secretKey);
@@ -594,4 +600,3 @@ Voici le code HTML et JavaScript mis à jour :
   </script>
 </body>
 </html>
-```
