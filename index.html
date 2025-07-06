@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Chiffreur Texte ↔ Image Sécurisé</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:;">
+  <meta name="referrer" content="no-referrer">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+        --primary-blue: #4A90E2; /* Un bleu légèrement plus vif */
+        --primary-blue-dark: #357ABD;
+        --light-gray: #F0F2F5; /* Un gris très clair pour le fond */
+        --medium-gray: #E0E4E8; /* Gris pour les bordures/séparateurs */
+        --dark-gray: #2C3E50; /* Texte principal foncé */
+        --text-color: #5C6F7F; /* Texte secondaire */
+        --border-color: #DDE2E7;
+        --shadow-light: rgba(0,0,0,0.06);
+        --shadow-medium: rgba(0,0,0,0.1);
+        --border-radius-sm: 8px;
+        --border-radius-md: 12px;
+        --transition-ease: all 0.3s ease;
+        --success-green: #28a745;
+        --error-red: #dc3545;
+    }
+    body {
+      font-family: 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      padding: 30px;
+      background: var(--light-gray);
+      color: var(--text-color);
+      text-align: center;
+      max-width: 1000px; /* Légèrement plus large */
+      margin: 30px auto;
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 10px 30px var(--shadow-light);
+      line-height: 1.6;
+    }
+    /* --- Animation de chargement --- */
+    #loader-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--light-gray);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        transition: opacity 0.8s ease-out;
+    }
+    .spinner {
+        width: 60px;
+        height: 60px;
+        border: 8px solid var(--medium-gray);
+        border-top-color: var(--primary-blue);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+    /* Gère la transition du contenu */
+    #app-content {
+        opacity: 0;
+        transition: opacity 0.8s ease-in;
+    }
+    /* Quand le body est chargé, on inverse les opacités */
+    body.loaded #loader-overlay {
+        opacity: 0;
+    }
+    body.loaded #app-content {
+        opacity: 1;
+    }
+    /* --- Fin de l'animation --- */
+    h1 {
+      color: var(--dark-gray);
+      margin-bottom: 40px;
+      font-size: 2.8em;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      color: var(--dark-gray);
+      margin-bottom: 25px;
+      font-size: 1.8em;
+      font-weight: 600;
+      border-bottom: 1px solid var(--medium-gray);
+      padding-bottom: 10px;
+    }
+    .input-section {
+      background: #ffffff;
+      padding: 35px;
+      margin-bottom: 35px;
+      border-radius: var(--border-radius-md);
+      box-shadow: 0 6px 20px var(--shadow-light);
+      border: 1px solid var(--border-color);
+      text-align: left;
+    }
+    label {
+      display: block;
+      margin-bottom: 12px;
+      font-weight: 600;
+      color: var(--dark-gray);
+      font-size: 1.1rem;
+    }
+    input[type="password"],
+    input[type="text"], /* Ajout pour l'IP locale */
+    textarea {
+      width: calc(100% - 30px); /* Ajustement padding */
+      padding: 15px;
+      margin-bottom: 22px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-sm);
+      font-size: 1.15rem;
+      transition: var(--transition-ease);
+      background-color: #fcfcfc;
+    }
+    input[type="password"]:focus,
+    input[type="text"]:focus, /* Ajout pour l'IP locale */
+    textarea:focus {
+      border-color: var(--primary-blue);
+      box-shadow: 0 0 0 5px rgba(74, 144, 226, 0.2); /* Ombre plus douce */
+      outline: none;
+    }
+    textarea {
+      min-height: 160px; /* Plus grand */
+      resize: vertical;
+    }
+    button {
+      background-color: var(--primary-blue);
+      color: white;
+      padding: 15px 35px;
+      border: none;
+      border-radius: var(--border-radius-sm);
+      cursor: pointer;
+      font-size: 1.15rem;
+      font-weight: 500;
+      transition: var(--transition-ease);
+      margin-top: 15px;
+      display: inline-flex; /* Pour centrer le contenu si besoin */
+      align-items: center;
+      justify-content: center;
+    }
+    button:hover {
+      background-color: var(--primary-blue-dark);
+      transform: translateY(-3px); /* Effet plus prononcé */
+      box-shadow: 0 8px 20px var(--shadow-medium);
+    }
+    button:disabled {
+      background-color: var(--medium-gray);
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+      opacity: 0.7;
+    }
+    canvas {
+      border: 1px solid var(--border-color);
+      margin-top: 30px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      max-width: 100%;
+      height: auto;
+      border-radius: var(--border-radius-sm);
+      background-color: #ffffff;
+      box-shadow: 0 2px 10px var(--shadow-light);
+    }
+    pre {
+      background: var(--medium-gray);
+      padding: 25px;
+      border-radius: var(--border-radius-sm);
+      text-align: left;
+      white-space: pre-wrap;
+      word-break: break-all;
+      min-height: 120px; /* Plus grand */
+      margin-top: 30px;
+      border: 1px solid var(--border-color);
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+      font-size: 1rem;
+      color: var(--dark-gray);
+      line-height: 1.5;
+    }
+    .status-message {
+      font-style: italic;
+      margin-top: 18px;
+      min-height: 30px; /* Pour éviter le décalage */
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px; /* Espace entre icône et texte */
+    }
+    .status-message.success { color: var(--success-green); }
+    .status-message.error { color: var(--error-red); }
+    .status-message.info { color: var(--text-color); }
+
+    .status-message::before {
+        font-family: "Font Awesome 5 Free"; /* Si tu utilises Font Awesome */
+        font-weight: 900;
+        margin-right: 5px;
+        content: ''; /* Initialement vide */
+    }
+    .status-message.success::before { content: "\f00c"; /* Check icon */ color: var(--success-green);}
+    .status-message.error::before { content: "\f06a"; /* Exclamation circle */ color: var(--error-red); }
+    .status-message.info::before { content: "\f129"; /* Info circle */ color: var(--text-color); }
+
+
+    .hidden { display: none; }
+    .image-output, .text-output { margin-top: 30px; }
+    input[type="file"] {
+      display: block;
+      margin: 20px auto 25px;
+      padding: 15px;
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-sm);
+      background-color: #fefefe;
+      width: calc(100% - 30px);
+      font-size: 1.1rem;
+      cursor: pointer;
+    }
+    .checkbox-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+        color: var(--dark-gray);
+        font-size: 1.05rem;
+        user-select: none; /* Empêche la sélection de texte */
+    }
+
+    .checkbox-container input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--primary-blue);
+        border-radius: 4px;
+        margin-right: 10px;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        transition: background-color 0.2s, border-color 0.2s;
+    }
+
+    .checkbox-container input[type="checkbox"]:checked {
+        background-color: var(--primary-blue);
+        border-color: var(--primary-blue);
+    }
+
+    .checkbox-container input[type="checkbox"]:checked::after {
+        content: '\2713'; /* Unicode checkmark */
+        color: white;
+        font-size: 14px;
+        font-weight: bold;
+    }
+
+    .checkbox-container input[type="checkbox"]:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.2);
+    }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+
+  <div id="loader-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="app-content">
+    <h1><i class="fas fa-lock"></i> Chiffrement Texte ↔ Image <i class="fas fa-image"></i></h1>
+    <div class="input-section">
+        <label for="secretKeyInput"><i class="fas fa-key"></i> Clé Secrète (mot de passe):</label>
+        <input type="password" id="secretKeyInput" placeholder="Entrez une clé secrète robuste...">
+    </div>
+
+    <div class="input-section">
+        <h2><i class="fas fa-arrow-circle-up"></i> Chiffrement: Texte → Image</h2>
+        <textarea id="textInput" placeholder="Entrez le texte à chiffrer ici..."></textarea>
+        <button id="generateBtn"><i class="fas fa-magic"></i> Chiffrer et Générer l’image</button>
+        <p id="encodeStatus" class="status-message info"></p>
+        <div class="image-output">
+            <canvas id="canvas"></canvas>
+            <button id="saveImageBtn" class="hidden"><i class="fas fa-download"></i> Sauvegarder l'image chiffrée</button>
+        </div>
+    </div>
+
+    <div class="input-section">
+        <h2><i class="fas fa-arrow-circle-down"></i> Déchiffrement: Image → Texte</h2>
+        <label for="uploadImage"><i class="fas fa-upload"></i> Uploader l'image chiffrée:</label>
+        <input type="file" id="uploadImage" accept="image/png">
+
+        <div class="checkbox-container">
+            <input type="checkbox" id="restrictIpCheckbox">
+            <label for="restrictIpCheckbox">Activer la restriction IP locale (Facultatif)</label>
+        </div>
+        <input type="text" id="allowedIpInput" placeholder="Ex: 192.168.1.X (laissez vide si non activé)" class="hidden">
+
+
+        <button id="decodeBtn"><i class="fas fa-unlock-alt"></i> Déchiffrer l’image</button>
+        <p id="decodeStatus" class="status-message info"></p>
+        <div class="text-output">
+            <pre id="outputText"></pre>
+            <button id="copyTextBtn" class="hidden"><i class="fas fa-copy"></i> Copier le texte</button>
+        </div>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    const startTime = Date.now();
+
+    // --- GESTION DU CHARGEMENT ---
+    window.onload = () => {
+        const MIN_LOAD_TIME = 1200; // 1.2 secondes
+        const elapsedTime = Date.now() - startTime;
+        const delay = Math.max(0, MIN_LOAD_TIME - elapsedTime);
+
+        setTimeout(() => {
+            document.body.classList.add('loaded');
+
+            // On supprime le loader du DOM après la transition pour la propreté
+            setTimeout(() => {
+                const loaderOverlay = document.getElementById('loader-overlay');
+                if (loaderOverlay) {
+                    loaderOverlay.style.display = 'none';
+                }
+            }, 800); // Doit correspondre à la durée de la transition CSS
+        }, delay);
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- CRYPTOGRAPHIE (AES-GCM) ---
+        async function getKeyFromPassword(password, salt) {
+          const enc = new TextEncoder();
+          const passwordKey = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+          return crypto.subtle.deriveKey({
+              name: "PBKDF2",
+              salt,
+              iterations: 250000,
+              hash: "SHA-256"
+            },
+            passwordKey,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+          );
+        }
+
+        async function encryptData(dataBytes, password) {
+          if (!password) throw new Error("Le mot de passe ne peut pas être vide.");
+          const salt = crypto.getRandomValues(new Uint8Array(16));
+          const iv = crypto.getRandomValues(new Uint8Array(12));
+          const key = await getKeyFromPassword(password, salt);
+          const encryptedContent = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, dataBytes);
+
+          const combined = new Uint8Array(salt.length + iv.length + encryptedContent.byteLength);
+          combined.set(salt, 0);
+          combined.set(iv, salt.length);
+          combined.set(new Uint8Array(encryptedContent), salt.length + iv.length);
+          return combined;
+        }
+
+        async function decryptData(combinedDataBytes, password) {
+          if (!password) throw new Error("Le mot de passe ne peut pas être vide.");
+          if (combinedDataBytes.length < 28) throw new Error("Données chiffrées invalides.");
+
+          const salt = combinedDataBytes.slice(0, 16);
+          const iv = combinedDataBytes.slice(16, 28);
+          const encryptedContent = combinedDataBytes.slice(28);
+
+          const key = await getKeyFromPassword(password, salt);
+          try {
+            return await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, encryptedContent);
+          } catch (e) {
+            throw new Error("Déchiffrement échoué. Mauvais mot de passe ou données corrompues.");
+          }
+        }
+
+        // --- ÉLÉMENTS DU DOM ---
+        const textInput = document.getElementById('textInput');
+        const secretKeyInput = document.getElementById('secretKeyInput');
+        const generateBtn = document.getElementById('generateBtn');
+        const canvas = document.getElementById('canvas');
+        const saveImageBtn = document.getElementById('saveImageBtn');
+        const encodeStatus = document.getElementById('encodeStatus');
+        const uploadImageInput = document.getElementById('uploadImage');
+        const decodeBtn = document.getElementById('decodeBtn');
+        const outputText = document.getElementById('outputText');
+        const copyTextBtn = document.getElementById('copyTextBtn');
+        const decodeStatus = document.getElementById('decodeStatus');
+
+        const restrictIpCheckbox = document.getElementById('restrictIpCheckbox');
+        const allowedIpInput = document.getElementById('allowedIpInput');
+
+        // --- Gestion de la restriction IP locale ---
+        restrictIpCheckbox.addEventListener('change', () => {
+            if (restrictIpCheckbox.checked) {
+                allowedIpInput.classList.remove('hidden');
+                // Tente de récupérer l'IP locale (cela ne fonctionne que pour WebRTC)
+                // Pour une véritable restriction IP locale, il faudrait une vérification côté serveur
+                // ou des mécanismes plus complexes comme des extensions de navigateur.
+                // Ici, c'est principalement une fonctionnalité "décorative" pour l'idée demandée.
+                getLocalIP().then(ip => {
+                    if (ip) {
+                        allowedIpInput.value = ip;
+                        decodeStatus.className = 'status-message info';
+                        decodeStatus.innerText = "IP locale détectée : " + ip + ". Vous pouvez la modifier.";
+                    } else {
+                        decodeStatus.className = 'status-message error';
+                        decodeStatus.innerText = "Impossible de détecter l'IP locale. Entrez-la manuellement.";
+                    }
+                });
+            } else {
+                allowedIpInput.classList.add('hidden');
+                allowedIpInput.value = '';
+                decodeStatus.className = 'status-message info';
+                decodeStatus.innerText = "";
+            }
+        });
+
+        async function getLocalIP() {
+            // Cette méthode est connue pour ne pas toujours fonctionner dans les navigateurs modernes
+            // sans WebRTC actif, et elle ne fournit pas l'IP publique.
+            // C'est une démonstration conceptuelle pour une "IP locale".
+            return new Promise(resolve => {
+                const pc = new RTCPeerConnection({ iceServers: [] });
+                pc.createDataChannel('');
+                pc.onicecandidate = (e) => {
+                    if (!e.candidate) return;
+                    const ipMatch = e.candidate.candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
+                    if (ipMatch) {
+                        resolve(ipMatch[1]);
+                        pc.close();
+                    }
+                };
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                setTimeout(() => resolve(null), 1000); // Timeout au cas où ça ne trouve rien
+            });
+        }
+
+
+        // --- Fonctions utilitaires pour les messages de statut ---
+        function setStatus(element, message, type = 'info') {
+            element.innerText = message;
+            element.className = `status-message ${type}`;
+        }
+
+        // --- CHIFFREMENT ET ENCODAGE ---
+        generateBtn.addEventListener('click', async () => {
+            const text = textInput.value;
+            const secretKey = secretKeyInput.value;
+            if (!text || !secretKey) {
+                setStatus(encodeStatus, "Veuillez entrer du texte et une clé secrète.", 'error');
+                return;
+            }
+
+            generateBtn.disabled = true;
+            setStatus(encodeStatus, "Chiffrement et génération de l'image...", 'info');
+
+            await new Promise(resolve => setTimeout(resolve, 10)); // Petite pause pour l'UI
+
+            try {
+                const textBytes = new TextEncoder().encode(text);
+                const encryptedBytes = await encryptData(textBytes, secretKey);
+
+                // Pour stocker la longueur des données chiffrées
+                const payload = new Uint8Array(4 + encryptedBytes.length);
+                new DataView(payload.buffer).setUint32(0, encryptedBytes.length, false); // Big Endian
+                payload.set(encryptedBytes, 4);
+
+                const numPixels = Math.ceil(payload.length / 4); // Chaque pixel a 4 canaux (RGBA)
+                const width = Math.min(1024, Math.max(16, Math.ceil(Math.sqrt(numPixels)))); // Ajustement intelligent de la largeur min 16, max 1024
+                const height = Math.ceil(numPixels / width);
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                const imgData = ctx.createImageData(width, height);
+
+                // Assurez-vous que payload est suffisamment grand pour remplir imgData.data
+                // Si payload.length est plus petit que imgData.data.length, le reste sera 0 (transparent/noir)
+                for (let i = 0; i < payload.length; i++) {
+                    imgData.data[i] = payload[i];
+                }
+                // Remplir le reste avec des zéros si nécessaire (transparent)
+                for (let i = payload.length; i < imgData.data.length; i++) {
+                    imgData.data[i] = 0;
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+
+                setStatus(encodeStatus, "Image chiffrée générée avec succès !", 'success');
+                saveImageBtn.classList.remove('hidden');
+            } catch (error) {
+                console.error(error);
+                setStatus(encodeStatus, `Erreur de chiffrement : ${error.message}`, 'error');
+            } finally {
+                generateBtn.disabled = false;
+            }
+        });
+
+        saveImageBtn.addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = canvas.toDataURL('image/png');
+            a.download = 'message_chiffre.png';
+            a.click();
+        });
+
+        // --- DECODAGE ET DECHIFFREMENT ---
+        const decodeCanvas = document.createElement('canvas'); // Canvas temporaire pour le décodage
+
+        uploadImageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.type !== 'image/png') {
+                setStatus(decodeStatus, "Veuillez uploader une image PNG.", 'error');
+                outputText.innerText = "";
+                copyTextBtn.classList.add('hidden');
+                return;
+            }
+
+            setStatus(decodeStatus, "Chargement de l'image...", 'info');
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    decodeCanvas.width = img.width;
+                    decodeCanvas.height = img.height;
+                    decodeCanvas.getContext('2d').drawImage(img, 0, 0);
+                    setStatus(decodeStatus, "Image chargée. Prête à déchiffrer.", 'info');
+                    outputText.innerText = "";
+                    copyTextBtn.classList.add('hidden');
+                };
+                img.onerror = () => setStatus(decodeStatus, "Erreur: Impossible de charger l'image. Est-ce une image valide ?", 'error');
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        decodeBtn.addEventListener('click', async () => {
+            const secretKey = secretKeyInput.value;
+            if (!secretKey || decodeCanvas.width === 0) {
+                setStatus(decodeStatus, "Veuillez entrer une clé secrète et charger une image.", 'error');
+                return;
+            }
+
+            // Vérification de l'IP locale si activée
+            if (restrictIpCheckbox.checked) {
+                const userAllowedIp = allowedIpInput.value.trim();
+                if (!userAllowedIp) {
+                    setStatus(decodeStatus, "Veuillez entrer une IP locale autorisée ou désactiver la restriction.", 'error');
+                    return;
+                }
+
+                const currentLocalIp = await getLocalIP();
+                if (!currentLocalIp || !currentLocalIp.startsWith(userAllowedIp)) {
+                    setStatus(decodeStatus, "Accès refusé : L'IP locale ne correspond pas à celle autorisée.", 'error');
+                    return;
+                }
+            }
+
+
+            decodeBtn.disabled = true;
+            setStatus(decodeStatus, "Lecture et déchiffrement...", 'info');
+
+            await new Promise(resolve => setTimeout(resolve, 10)); // Petite pause pour l'UI
+
+            try {
+                const ctx = decodeCanvas.getContext('2d');
+                const imgData = ctx.getImageData(0, 0, decodeCanvas.width, decodeCanvas.height);
+                const allBytes = imgData.data;
+
+                // Récupérer la longueur des données chiffrées stockée au début
+                const encryptedDataLength = new DataView(allBytes.buffer).getUint32(0, false); // Big Endian
+                // Extraire uniquement les octets pertinents
+                const encryptedBytes = allBytes.slice(4, 4 + encryptedDataLength);
+
+                const decryptedBytes = await decryptData(encryptedBytes, secretKey);
+                const decodedText = new TextDecoder().decode(decryptedBytes);
+
+                outputText.innerText = decodedText;
+                setStatus(decodeStatus, "Texte déchiffré avec succès !", 'success');
+                if (decodedText) {
+                    copyTextBtn.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error(error);
+                setStatus(decodeStatus, `Erreur de déchiffrement : ${error.message}`, 'error');
+                outputText.innerText = "";
+            } finally {
+                decodeBtn.disabled = false;
+            }
+        });
+
+        copyTextBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(outputText.innerText)
+                .then(() => alert("Texte copié dans le presse-papiers !"))
+                .catch(err => console.error('Erreur lors de la copie:', err));
+        });
+    });
+  </script>
+</body>
+</html>
